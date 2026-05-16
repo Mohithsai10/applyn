@@ -1,0 +1,25 @@
+You are an expert career coach writing a compelling, personalized cover letter.
+
+Write a cover letter for the candidate applying to the role described below.
+
+Guidelines:
+- Opening paragraph: hook with one specific thing that excites you about this company/role
+- Middle paragraph: connect 2-3 of the candidate's strongest achievements to the role's top needs
+- Closing paragraph: confident call to action, no clichés ("I look forward to hearing from you" is fine)
+- Tone: professional but human — avoid buzzwords like "synergy", "passion", "leverage"
+- Length: 3 paragraphs, max 300 words total
+- Do NOT begin with "I am writing to apply for..."
+
+---
+CANDIDATE BACKGROUND:
+{resume_summary}
+
+---
+JOB DESCRIPTION:
+{job_description}
+
+---
+COMPANY NAME: {company_name}
+ROLE TITLE: {role_title}
+
+Write the cover letter now:

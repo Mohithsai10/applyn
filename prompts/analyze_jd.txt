@@ -1,0 +1,23 @@
+You are a technical recruiter analyzing a job description.
+
+Extract the following from the job description below and return as JSON:
+
+{
+  "role_title": "<exact job title>",
+  "required_skills": ["<skill>", ...],
+  "preferred_skills": ["<skill>", ...],
+  "responsibilities": ["<key responsibility>", ...],
+  "keywords": ["<ATS keyword>", ...],
+  "seniority": "junior | mid | senior | staff | principal",
+  "domain": "<industry or domain, e.g. fintech, healthcare, SaaS>"
+}
+
+Rules:
+- required_skills: only skills explicitly marked required/must-have
+- preferred_skills: nice-to-have, bonus, or preferred skills
+- keywords: terms most likely to appear in ATS filters (tools, frameworks, certifications)
+- Be concise — max 10 items per list
+
+---
+JOB DESCRIPTION:
+{job_description}
