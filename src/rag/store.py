@@ -31,3 +31,20 @@ def query_collection(
 ) -> list[list[str]]:
     results = collection.query(query_texts=query_texts, n_results=n_results)
     return results.get("documents", [])
+
+
+def retrieve_bullets(skills: list[str], n_results: int = 3) -> list[str]:
+    client = get_client()
+    collection = get_or_create_collection(client, "resume_bullets")
+    seen: set[str] = set()
+    bullets: list[str] = []
+    for skill in skills:
+        try:
+            docs = query_collection(collection, [skill], n_results=n_results)
+            for doc in docs[0] if docs else []:
+                if doc not in seen:
+                    seen.add(doc)
+                    bullets.append(doc)
+        except Exception:
+            pass
+    return bullets
