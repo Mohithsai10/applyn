@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import AnimatedBackground from "@/components/AnimatedBackground"
+import CursorFollower from "@/components/CursorFollower"
 import Navbar from "@/components/Navbar"
 import Hero from "@/components/Hero"
 import HowItWorks from "@/components/HowItWorks"
@@ -31,14 +33,18 @@ export default function Home() {
 
   return (
     <>
-      <Navbar />
-      <Hero />
-      <HowItWorks />
-      <UploadSection onUpload={setSessionId} />
-      <JobInput sessionId={sessionId} onResults={setResults} />
-      {results && <ResultsSection results={results} />}
-      <SocialProof />
-      <Footer />
+      <AnimatedBackground />
+      <CursorFollower />
+      <div style={{ position: "relative", zIndex: 1 }}>
+        <Navbar />
+        <Hero />
+        <HowItWorks />
+        <UploadSection onUpload={setSessionId} />
+        <JobInput sessionId={sessionId} onResults={setResults} />
+        {results && <ResultsSection results={results} />}
+        <SocialProof />
+        <Footer />
+      </div>
     </>
   )
 }

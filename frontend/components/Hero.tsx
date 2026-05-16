@@ -220,7 +220,7 @@ export default function Hero() {
       </div>
 
       {/* ── Floating mockup card ──────────────────────────────── */}
-      <FadeUp delay={0.5} style={{ marginTop: 64, position: "relative", zIndex: 1 }}>
+      <FadeUp delay={0.5} style={{ marginTop: 80, position: "relative", zIndex: 1 }}>
         <motion.div
           animate={{ y: [0, -12, 0] }}
           transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
@@ -231,7 +231,7 @@ export default function Hero() {
             border: "1px solid #1a1a1a",
             borderRadius: 16,
             padding: 24,
-            boxShadow: "0 40px 120px rgba(0,255,135,0.08)",
+            boxShadow: "0 0 80px rgba(0,255,135,0.08), 0 40px 80px rgba(0,0,0,0.4)",
           }}
         >
           {/* Window chrome */}
@@ -359,13 +359,26 @@ export default function Hero() {
         </motion.div>
       </FadeUp>
 
+      {/* ── Separator ────────────────────────────────────────── */}
+      <div
+        aria-hidden
+        style={{
+          width: "100%",
+          height: 1,
+          background: "#111",
+          marginTop: 56,
+          position: "relative",
+          zIndex: 1,
+        }}
+      />
+
       {/* ── Company marquee ──────────────────────────────────── */}
       <div
         style={{
           position: "relative",
           zIndex: 1,
           width: "100%",
-          marginTop: 56,
+          marginTop: 32,
         }}
       >
         <p
@@ -396,7 +409,7 @@ export default function Hero() {
                   color: "#2a2a2a",
                   fontSize: 14,
                   fontWeight: 600,
-                  letterSpacing: "0.06em",
+                  letterSpacing: "0.2em",
                   whiteSpace: "nowrap",
                   textTransform: "uppercase",
                 }}

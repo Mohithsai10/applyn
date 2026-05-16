@@ -38,10 +38,7 @@ export default function UploadSection({ onUpload }: Props) {
       try {
         const form = new FormData()
         form.append("file", file)
-        const res = await fetch(`${API}/upload-resume`, {
-          method: "POST",
-          body: form,
-        })
+        const res = await fetch(`${API}/upload-resume`, { method: "POST", body: form })
         if (!res.ok) {
           const body = await res.json().catch(() => ({ detail: "Upload failed" }))
           throw new Error(body.detail ?? "Upload failed")
@@ -85,15 +82,13 @@ export default function UploadSection({ onUpload }: Props) {
           }}
         >
           {/* Left — text */}
-          <div>
-            <span className="badge">Step 01</span>
+          <div style={{ maxWidth: 420 }}>
             <h2
               style={{
                 fontSize: "clamp(32px, 4vw, 48px)",
                 fontWeight: 800,
                 letterSpacing: "-0.03em",
                 color: "#fff",
-                marginTop: 24,
                 lineHeight: 1.1,
               }}
             >
@@ -158,6 +153,7 @@ export default function UploadSection({ onUpload }: Props) {
                     boxShadow: "0 0 40px rgba(0,255,135,0.05)",
                   }}
                 >
+                  <span className="badge" style={{ marginBottom: 4 }}>Step 01</span>
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
@@ -238,6 +234,10 @@ export default function UploadSection({ onUpload }: Props) {
                     }}
                   />
 
+                  <span className="badge" style={{ position: "absolute", top: 20 }}>
+                    Step 01
+                  </span>
+
                   {state === "uploading" ? (
                     <>
                       <div
@@ -250,9 +250,7 @@ export default function UploadSection({ onUpload }: Props) {
                           animation: "spin 0.8s linear infinite",
                         }}
                       />
-                      <p style={{ color: "#555", fontSize: 14 }}>
-                        Uploading {fileName}…
-                      </p>
+                      <p style={{ color: "#555", fontSize: 14 }}>Uploading {fileName}…</p>
                     </>
                   ) : state === "error" ? (
                     <>
@@ -298,9 +296,7 @@ export default function UploadSection({ onUpload }: Props) {
                           browse files
                         </span>
                       </p>
-                      <p style={{ color: "#333", fontSize: 12, marginTop: 4 }}>
-                        PDF or DOCX · Max 10 MB
-                      </p>
+                      <p style={{ color: "#333", fontSize: 12 }}>PDF or DOCX · Max 10 MB</p>
                     </>
                   )}
                 </motion.div>

@@ -76,7 +76,7 @@ export default function SocialProof() {
                 damping: 28,
                 delay: i * 0.1,
               }}
-              style={{ display: "flex", flexDirection: "column", gap: 20 }}
+              style={{ display: "flex", flexDirection: "column", gap: 20, padding: 40, minHeight: 240 }}
             >
               {/* Stars */}
               <div style={{ display: "flex", gap: 4 }}>

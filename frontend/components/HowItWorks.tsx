@@ -34,7 +34,7 @@ export default function HowItWorks() {
     <section id="how" className="section" style={{ background: "#080808" }}>
       <div className="container">
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 72 }}>
+        <div style={{ textAlign: "center", marginBottom: 64 }}>
           <span className="badge">The Process</span>
           <h2
             style={{
@@ -48,39 +48,38 @@ export default function HowItWorks() {
           >
             How Applyn works
           </h2>
-          <p
-            style={{
-              color: "#555",
-              fontSize: 18,
-              marginTop: 16,
-              lineHeight: 1.6,
-            }}
-          >
+          <p style={{ color: "#555", fontSize: 18, marginTop: 16, lineHeight: 1.6 }}>
             From resume to tailored application in under a minute.
           </p>
         </div>
 
-        {/* 2×2 Grid */}
+        {/* Touching 2×2 grid */}
         <div
           ref={ref}
           className="two-col"
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
-            gap: 24,
+            gap: "2px",
+            background: "#111",
+            borderRadius: 16,
+            overflow: "hidden",
           }}
         >
           {STEPS.map((step, i) => (
             <motion.div
               key={step.num}
-              className="card-dark"
-              initial={{ opacity: 0, y: 40 }}
+              initial={{ opacity: 0, y: 32 }}
               animate={isInView ? { opacity: 1, y: 0 } : {}}
               transition={{
                 type: "spring",
                 stiffness: 280,
                 damping: 28,
                 delay: i * 0.1,
+              }}
+              style={{
+                background: "#0f0f0f",
+                padding: 48,
               }}
             >
               <span
@@ -95,7 +94,7 @@ export default function HowItWorks() {
               </span>
               <h3
                 style={{
-                  fontSize: 24,
+                  fontSize: 22,
                   fontWeight: 700,
                   color: "#fff",
                   marginTop: 20,
@@ -107,7 +106,7 @@ export default function HowItWorks() {
               </h3>
               <p
                 style={{
-                  fontSize: 16,
+                  fontSize: 15,
                   color: "#555",
                   marginTop: 10,
                   lineHeight: 1.65,

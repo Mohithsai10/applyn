@@ -99,9 +99,14 @@ export default function JobInput({ sessionId, onResults }: Props) {
             alignItems: "start",
           }}
         >
-          {/* Left — card with input + button */}
+          {/* Left — input card */}
           <div>
-            <div className="card-dark" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div
+              className="card-dark"
+              style={{ display: "flex", flexDirection: "column", gap: 16, position: "relative" }}
+            >
+              <span className="badge" style={{ alignSelf: "flex-start" }}>Step 02</span>
+
               <input
                 type="url"
                 value={url}
@@ -115,12 +120,8 @@ export default function JobInput({ sessionId, onResults }: Props) {
                   width: "100%",
                   height: 56,
                   background: "#0d0d0d",
-                  border: focused
-                    ? "1px solid #00FF87"
-                    : "1px solid #1a1a1a",
-                  boxShadow: focused
-                    ? "0 0 0 3px rgba(0,255,135,0.1)"
-                    : "none",
+                  border: focused ? "1px solid #00FF87" : "1px solid #1a1a1a",
+                  boxShadow: focused ? "0 0 0 3px rgba(0,255,135,0.1)" : "none",
                   borderRadius: 10,
                   color: "#fff",
                   fontSize: 15,
@@ -205,15 +206,13 @@ export default function JobInput({ sessionId, onResults }: Props) {
           </div>
 
           {/* Right — text */}
-          <div>
-            <span className="badge">Step 02</span>
+          <div style={{ maxWidth: 420 }}>
             <h2
               style={{
                 fontSize: "clamp(32px, 4vw, 48px)",
                 fontWeight: 800,
                 letterSpacing: "-0.03em",
                 color: "#fff",
-                marginTop: 24,
                 lineHeight: 1.1,
               }}
             >
