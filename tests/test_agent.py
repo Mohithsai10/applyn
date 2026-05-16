@@ -7,22 +7,32 @@ from src.agents.graph import GraphState, build_graph
 
 def test_graph_state_keys() -> None:
     state: GraphState = {
-        "resume_text": "Software engineer with 5 years experience.",
+        "job_url": "https://example.com/job",
         "job_description": "Looking for a senior Python developer.",
-        "tailored_bullets": [],
+        "top_skills": [],
+        "company_name": "",
+        "seniority_level": "",
+        "relevant_bullets": [],
+        "rewritten_bullets": [],
+        "ats_score_before": 0.0,
+        "ats_score_after": 0.0,
         "cover_letter": "",
-        "match_score": 0.0,
-        "feedback": "",
-        "messages": [],
+        "error": "",
+        "retry_count": 0,
     }
     assert set(state.keys()) == {
-        "resume_text",
+        "job_url",
         "job_description",
-        "tailored_bullets",
+        "top_skills",
+        "company_name",
+        "seniority_level",
+        "relevant_bullets",
+        "rewritten_bullets",
+        "ats_score_before",
+        "ats_score_after",
         "cover_letter",
-        "match_score",
-        "feedback",
-        "messages",
+        "error",
+        "retry_count",
     }
 
 
