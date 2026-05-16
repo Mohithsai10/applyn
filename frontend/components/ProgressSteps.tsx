@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 
-const STEPS = [
+export const STEPS = [
   { icon: "🔍", label: "Scraping job posting..." },
   { icon: "🧠", label: "Extracting required skills..." },
   { icon: "📚", label: "Retrieving your best experience..." },
@@ -12,38 +12,47 @@ const STEPS = [
 ]
 
 interface Props {
-  currentStep: number // index of in-progress step; >= STEPS.length means all done
+  currentStep: number
 }
 
 function Spinner() {
   return (
     <div
-      className="h-4 w-4 rounded-full border-2 animate-spin-step"
-      style={{ borderColor: "#00E87A", borderTopColor: "transparent" }}
+      style={{
+        width: 16,
+        height: 16,
+        borderRadius: "50%",
+        border: "2px solid #1a1a1a",
+        borderTop: "2px solid #00FF87",
+        animation: "spin 0.8s linear infinite",
+        flexShrink: 0,
+      }}
     />
   )
 }
 
 function Checkmark() {
   return (
-    <motion.svg
+    <motion.div
       initial={{ scale: 0, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ type: "spring", stiffness: 400, damping: 20 }}
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
+      style={{
+        width: 16,
+        height: 16,
+        borderRadius: "50%",
+        background: "rgba(0,255,135,0.15)",
+        border: "1px solid rgba(0,255,135,0.4)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 9,
+        color: "#00FF87",
+        flexShrink: 0,
+      }}
     >
-      <circle cx="8" cy="8" r="8" fill="rgba(0,232,122,0.15)" />
-      <path
-        d="M4.5 8.5L7 11L11.5 5.5"
-        stroke="#00E87A"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </motion.svg>
+      ✓
+    </motion.div>
   )
 }
 
@@ -52,62 +61,58 @@ export default function ProgressSteps({ currentStep }: Props) {
 
   return (
     <motion.div
-      className="glass rounded-2xl p-5 space-y-2.5 overflow-hidden"
       initial={{ opacity: 0, y: 16, height: 0 }}
       animate={{ opacity: 1, y: 0, height: "auto" }}
       exit={{ opacity: 0, y: 12, height: 0 }}
       transition={{ type: "spring", stiffness: 280, damping: 28 }}
+      className="card-dark"
+      style={{ overflow: "hidden" }}
     >
       <p
-        className="text-xs font-semibold uppercase tracking-widest mb-3"
-        style={{ color: "#8892A4" }}
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          textTransform: "uppercase",
+          letterSpacing: "0.1em",
+          color: "#333",
+          marginBottom: 16,
+        }}
       >
         Agent running
       </p>
 
       <AnimatePresence initial={false}>
-        {STEPS.slice(0, visibleCount).map((step, index) => {
-          const isCompleted = index < currentStep
-          const isCurrent = index === currentStep
-
-          return (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, x: -16 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{
-                type: "spring",
-                stiffness: 280,
-                damping: 28,
-                delay: 0,
-              }}
-              className="flex items-center gap-3"
-            >
-              <span className="text-base w-5 text-center leading-none select-none">
-                {step.icon}
-              </span>
-
-              <span
-                className="flex-1 text-sm"
-                style={{
-                  color: isCompleted
-                    ? "#F0F4FF"
-                    : isCurrent
-                      ? "#F0F4FF"
-                      : "#8892A4",
-                  fontWeight: isCurrent ? 500 : 400,
-                }}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {STEPS.slice(0, visibleCount).map((step, index) => {
+            const isCompleted = index < currentStep
+            const isCurrent = index === currentStep
+            return (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ type: "spring", stiffness: 280, damping: 28 }}
+                style={{ display: "flex", alignItems: "center", gap: 12 }}
               >
-                {step.label}
-              </span>
-
-              {isCompleted ? <Checkmark /> : isCurrent ? <Spinner /> : null}
-            </motion.div>
-          )
-        })}
+                <span style={{ fontSize: 14, width: 20, textAlign: "center", flexShrink: 0 }}>
+                  {step.icon}
+                </span>
+                <span
+                  style={{
+                    flex: 1,
+                    fontSize: 14,
+                    color: isCompleted || isCurrent ? "#fff" : "#555",
+                    fontWeight: isCurrent ? 500 : 400,
+                  }}
+                >
+                  {step.label}
+                </span>
+                {isCompleted ? <Checkmark /> : isCurrent ? <Spinner /> : null}
+              </motion.div>
+            )
+          })}
+        </div>
       </AnimatePresence>
     </motion.div>
   )
 }
-
-export { STEPS }

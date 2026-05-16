@@ -1,25 +1,28 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { motion, AnimatePresence, animate } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import type { AnalyzeResponse } from "@/app/page"
-
-const SPRING = { type: "spring" as const, stiffness: 280, damping: 28 }
 
 interface Props {
   results: AnalyzeResponse
 }
 
-function useAnimatedNumber(target: number, delay = 0) {
+function useCountUp(target: number, delay = 0) {
   const [display, setDisplay] = useState(0)
   useEffect(() => {
-    const controls = animate(0, target, {
-      duration: 1.4,
-      delay,
-      ease: [0.16, 1, 0.3, 1],
-      onUpdate: (v) => setDisplay(Math.round(v)),
-    })
-    return () => controls.stop()
+    const start = performance.now() + delay * 1000
+    const duration = 1400
+    let raf: number
+    function tick(now: number) {
+      const elapsed = Math.max(0, now - start)
+      const progress = Math.min(elapsed / duration, 1)
+      const ease = 1 - Math.pow(1 - progress, 4)
+      setDisplay(Math.round(ease * target))
+      if (progress < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
   }, [target, delay])
   return display
 }
@@ -38,78 +41,95 @@ function ScoreCard({
   delta?: number
 }) {
   const pct = Math.round(score * 100)
-  const displayPct = useAnimatedNumber(pct, delay)
+  const display = useCountUp(pct, delay)
 
   return (
     <motion.div
-      className="flex-1 rounded-2xl p-6 flex flex-col gap-3"
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ ...SPRING, delay }}
+      transition={{ type: "spring", stiffness: 280, damping: 28, delay }}
+      className="card-dark"
       style={{
-        background: highlight ? "rgba(0,232,122,0.05)" : "rgba(255,255,255,0.03)",
+        flex: 1,
+        background: highlight ? "rgba(0,255,135,0.03)" : "#111",
         border: highlight
-          ? "1px solid rgba(0,232,122,0.3)"
-          : "1px solid rgba(255,255,255,0.07)",
-        boxShadow: highlight ? "0 0 30px rgba(0,232,122,0.1)" : "none",
+          ? "1px solid rgba(0,255,135,0.3)"
+          : "1px solid #1a1a1a",
+        boxShadow: highlight ? "0 0 40px rgba(0,255,135,0.1)" : "none",
       }}
     >
       <p
-        className="text-xs font-semibold uppercase tracking-widest"
-        style={{ color: highlight ? "#00E87A" : "#8892A4" }}
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          textTransform: "uppercase",
+          letterSpacing: "0.1em",
+          color: highlight ? "#00FF87" : "#555",
+          marginBottom: 16,
+        }}
       >
         {label}
       </p>
-
-      <div className="flex items-end gap-3">
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
         <span
-          className="text-5xl font-bold leading-none tabular-nums"
           style={{
-            color: highlight ? "#00E87A" : "#8892A4",
+            fontSize: 64,
+            fontWeight: 800,
+            lineHeight: 1,
             letterSpacing: "-0.04em",
+            color: highlight ? "#00FF87" : "#555",
           }}
         >
-          {displayPct}
+          {display}
         </span>
         <span
-          className="text-xl mb-1"
-          style={{ color: highlight ? "rgba(0,232,122,0.6)" : "rgba(255,255,255,0.2)" }}
+          style={{
+            fontSize: 24,
+            color: highlight ? "rgba(0,255,135,0.5)" : "rgba(255,255,255,0.15)",
+            marginBottom: 6,
+          }}
         >
           %
         </span>
-
         {highlight && delta !== undefined && delta > 0 && (
           <motion.span
             initial={{ opacity: 0, scale: 0.7 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ ...SPRING, delay: delay + 0.6 }}
-            className="mb-1 rounded-full px-2 py-0.5 text-xs font-bold"
+            transition={{ type: "spring", stiffness: 280, damping: 28, delay: delay + 0.6 }}
             style={{
-              background: "rgba(0,232,122,0.15)",
-              color: "#00E87A",
-              border: "1px solid rgba(0,232,122,0.3)",
+              marginBottom: 6,
+              background: "rgba(0,255,135,0.12)",
+              color: "#00FF87",
+              border: "1px solid rgba(0,255,135,0.3)",
+              borderRadius: 999,
+              padding: "2px 8px",
+              fontSize: 12,
+              fontWeight: 700,
             }}
           >
             +{delta}%
           </motion.span>
         )}
       </div>
-
       {/* Progress bar */}
       <div
-        className="h-1 w-full rounded-full overflow-hidden"
-        style={{ background: "rgba(255,255,255,0.06)" }}
+        style={{
+          marginTop: 16,
+          height: 3,
+          borderRadius: 99,
+          background: "#1a1a1a",
+          overflow: "hidden",
+        }}
       >
         <motion.div
-          className="h-full rounded-full"
-          style={{
-            background: highlight
-              ? "linear-gradient(90deg, #00E87A, #00B8D4)"
-              : "rgba(255,255,255,0.15)",
-          }}
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
           transition={{ duration: 1.2, delay, ease: [0.16, 1, 0.3, 1] }}
+          style={{
+            height: "100%",
+            borderRadius: 99,
+            background: highlight ? "#00FF87" : "rgba(255,255,255,0.15)",
+          }}
         />
       </div>
     </motion.div>
@@ -127,73 +147,55 @@ function BulletCard({
 }) {
   return (
     <motion.div
-      className="glass rounded-2xl overflow-hidden"
+      className="card-dark"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ ...SPRING, delay: 0.05 * index }}
+      transition={{ type: "spring", stiffness: 280, damping: 28, delay: index * 0.08 }}
+      style={{ padding: 0, overflow: "hidden" }}
     >
-      <div className="grid grid-cols-2 divide-x divide-white/[0.06]">
-        {/* Original */}
-        <div className="p-5 flex flex-col gap-2">
-          <span
-            className="text-xs font-semibold uppercase tracking-widest"
-            style={{ color: "#8892A4" }}
+      <div
+        className="two-col"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          borderRadius: 16,
+          overflow: "hidden",
+        }}
+      >
+        <div style={{ padding: 24, borderRight: "1px solid #1a1a1a" }}>
+          <p
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              color: "#555",
+              marginBottom: 10,
+            }}
           >
             Original
-          </span>
-          <p
-            className="text-sm leading-relaxed italic"
-            style={{ color: "#8892A4" }}
-          >
+          </p>
+          <p style={{ fontSize: 14, color: "#555", fontStyle: "italic", lineHeight: 1.6 }}>
             {original}
           </p>
         </div>
-
-        {/* Rewritten */}
-        <div className="p-5 flex flex-col gap-2">
-          <span
-            className="text-xs font-semibold uppercase tracking-widest"
-            style={{ color: "#00E87A" }}
+        <div style={{ padding: 24 }}>
+          <p
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              color: "#00FF87",
+              marginBottom: 10,
+            }}
           >
             Rewritten ✓
-          </span>
-          <p
-            className="text-sm leading-relaxed"
-            style={{ color: "#F0F4FF" }}
-          >
-            {rewritten}
           </p>
+          <p style={{ fontSize: 14, color: "#fff", lineHeight: 1.6 }}>{rewritten}</p>
         </div>
       </div>
     </motion.div>
-  )
-}
-
-function DownloadBtn({
-  label,
-  icon,
-  variant,
-  onClick,
-}: {
-  label: string
-  icon: React.ReactNode
-  variant: "solid" | "outline"
-  onClick: () => void
-}) {
-  return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      className={`flex flex-1 items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold transition-all ${
-        variant === "solid" ? "btn-primary shimmer-btn" : "btn-outline"
-      }`}
-      whileHover={{ y: -2 }}
-      whileTap={{ scale: 0.97 }}
-      transition={{ duration: 0.15 }}
-    >
-      {icon}
-      {label}
-    </motion.button>
   )
 }
 
@@ -221,147 +223,173 @@ export default function ResultsSection({ results }: Props) {
   }
 
   return (
-    <motion.section
-      layoutId="results"
-      initial={{ opacity: 0, y: 60 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ ...SPRING }}
-      className="flex flex-col gap-10"
-    >
-      {/* ATS Scores */}
-      <div>
-        <h3
-          className="mb-5 text-base font-semibold tracking-tight"
-          style={{ color: "#F0F4FF", letterSpacing: "-0.02em" }}
-        >
-          ATS Match Score
-        </h3>
-        <div className="flex gap-4">
-          <ScoreCard
-            label="Before"
-            score={results.ats_score_before}
-            delay={0}
-            highlight={false}
-          />
-          <ScoreCard
-            label="After"
-            score={results.ats_score_after}
-            delay={0.15}
-            highlight
-            delta={deltaPct > 0 ? deltaPct : undefined}
-          />
-        </div>
-      </div>
-
-      {/* Bullets */}
-      {results.rewritten_bullets.length > 0 && (
+    <section className="section" style={{ background: "#080808" }}>
+      <div className="container" style={{ display: "flex", flexDirection: "column", gap: 64 }}>
+        {/* ATS Scores */}
         <div>
-          <h3
-            className="mb-5 text-base font-semibold tracking-tight"
-            style={{ color: "#F0F4FF", letterSpacing: "-0.02em" }}
-          >
-            Rewritten Bullets
-          </h3>
-          <div className="flex flex-col gap-3">
-            {results.rewritten_bullets.map((rb, i) => (
-              <BulletCard
-                key={i}
-                original={results.relevant_bullets[i] ?? "—"}
-                rewritten={rb}
-                index={i}
-              />
-            ))}
+          <div style={{ textAlign: "center", marginBottom: 40 }}>
+            <span className="badge">Results</span>
+            <h2
+              style={{
+                fontSize: "clamp(32px, 4vw, 48px)",
+                fontWeight: 800,
+                letterSpacing: "-0.03em",
+                color: "#fff",
+                marginTop: 16,
+              }}
+            >
+              Your tailored application
+            </h2>
+          </div>
+          <div style={{ display: "flex", gap: 24 }}>
+            <ScoreCard
+              label="ATS Score Before"
+              score={results.ats_score_before}
+              delay={0}
+              highlight={false}
+            />
+            <ScoreCard
+              label="ATS Score After"
+              score={results.ats_score_after}
+              delay={0.15}
+              highlight
+              delta={deltaPct > 0 ? deltaPct : undefined}
+            />
           </div>
         </div>
-      )}
 
-      {/* Cover letter */}
-      {results.cover_letter && (
-        <div>
-          <div className="mb-5 flex items-center justify-between">
+        {/* Rewritten Bullets */}
+        {results.rewritten_bullets.length > 0 && (
+          <div>
             <h3
-              className="text-base font-semibold tracking-tight"
-              style={{ color: "#F0F4FF", letterSpacing: "-0.02em" }}
+              style={{
+                fontSize: 22,
+                fontWeight: 700,
+                color: "#fff",
+                letterSpacing: "-0.02em",
+                marginBottom: 20,
+              }}
             >
-              Cover Letter
+              Rewritten bullets
             </h3>
-            <motion.button
-              type="button"
-              onClick={copyLetter}
-              className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all"
-              style={{
-                background: copied
-                  ? "rgba(0,232,122,0.12)"
-                  : "rgba(255,255,255,0.05)",
-                color: copied ? "#00E87A" : "#8892A4",
-                border: copied
-                  ? "1px solid rgba(0,232,122,0.3)"
-                  : "1px solid rgba(255,255,255,0.08)",
-              }}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-            >
-              {copied ? "✓ Copied" : "Copy"}
-            </motion.button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {results.rewritten_bullets.map((rb, i) => (
+                <BulletCard
+                  key={i}
+                  original={results.relevant_bullets[i] ?? "—"}
+                  rewritten={rb}
+                  index={i}
+                />
+              ))}
+            </div>
           </div>
+        )}
 
-          <motion.div
-            className="glass rounded-2xl p-7"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ ...SPRING, delay: 0.1 }}
-            style={{ boxShadow: "0 0 40px rgba(0,0,0,0.3)" }}
-          >
-            <p
-              className="whitespace-pre-wrap text-sm leading-7"
-              style={{
-                color: "#F0F4FF",
-                fontFamily: "var(--font-mono)",
-              }}
+        {/* Cover Letter */}
+        {results.cover_letter && (
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <h3
+                style={{
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: "#fff",
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                Cover letter
+              </h3>
+              <motion.button
+                onClick={copyLetter}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.97 }}
+                style={{
+                  background: copied ? "rgba(0,255,135,0.08)" : "transparent",
+                  color: copied ? "#00FF87" : "#555",
+                  border: copied ? "1px solid rgba(0,255,135,0.3)" : "1px solid #222",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                {copied ? "✓ Copied" : "Copy"}
+              </motion.button>
+            </div>
+            <motion.div
+              className="card-dark"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ type: "spring", stiffness: 280, damping: 28, delay: 0.1 }}
             >
-              {results.cover_letter}
-            </p>
-          </motion.div>
-        </div>
-      )}
+              <p
+                style={{
+                  whiteSpace: "pre-wrap",
+                  fontSize: 14,
+                  lineHeight: 1.8,
+                  color: "#ccc",
+                  fontFamily: "var(--font-inter), monospace",
+                }}
+              >
+                {results.cover_letter}
+              </p>
+            </motion.div>
+          </div>
+        )}
 
-      {/* Export row */}
-      <div className="flex gap-3">
-        <DownloadBtn
-          variant="solid"
-          label="Download Resume PDF"
-          icon={
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-              <path
-                d="M7.5 1v9m0 0L4.5 7m3 3L10.5 7M2 13h11"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          }
-          onClick={() =>
-            downloadText(results.rewritten_bullets.join("\n"), "resume-tailored.txt")
-          }
-        />
-        <DownloadBtn
-          variant="outline"
-          label="Download Cover Letter"
-          icon={
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-              <path
-                d="M7.5 1v9m0 0L4.5 7m3 3L10.5 7M2 13h11"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          }
-          onClick={() => downloadText(results.cover_letter, "cover-letter.txt")}
-        />
+        {/* Export buttons */}
+        <div style={{ display: "flex", gap: 12 }}>
+          <motion.button
+            onClick={() => downloadText(results.rewritten_bullets.join("\n"), "resume-tailored.txt")}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.97 }}
+            style={{
+              flex: 1,
+              height: 52,
+              background: "#00FF87",
+              color: "#000",
+              fontWeight: 700,
+              fontSize: 15,
+              border: "none",
+              borderRadius: 10,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            ↓ Download Resume
+          </motion.button>
+          <motion.button
+            onClick={() => downloadText(results.cover_letter, "cover-letter.txt")}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.97 }}
+            style={{
+              flex: 1,
+              height: 52,
+              background: "transparent",
+              color: "#fff",
+              fontWeight: 600,
+              fontSize: 15,
+              border: "1px solid #222",
+              borderRadius: 10,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              transition: "border-color 0.2s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#00FF87")}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#222")}
+          >
+            ↓ Download Cover Letter
+          </motion.button>
+        </div>
       </div>
-    </motion.section>
+    </section>
   )
 }

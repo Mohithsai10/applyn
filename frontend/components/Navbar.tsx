@@ -2,67 +2,92 @@
 
 import { useEffect, useState } from "react"
 
+const NAV_LINKS = ["How it works", "Pricing", "About"]
+
 export default function Navbar() {
-  const [hidden, setHidden] = useState(false)
-  const [lastY, setLastY] = useState(0)
+  const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
-    const onScroll = () => {
-      const y = window.scrollY
-      setHidden(y > lastY && y > 80)
-      setLastY(y)
-    }
-    window.addEventListener("scroll", onScroll, { passive: true })
-    return () => window.removeEventListener("scroll", onScroll)
-  }, [lastY])
+    const handle = () => setScrolled(window.scrollY > 24)
+    window.addEventListener("scroll", handle, { passive: true })
+    return () => window.removeEventListener("scroll", handle)
+  }, [])
 
   return (
     <header
-      className="sticky top-0 z-50 w-full transition-transform duration-300"
       style={{
-        transform: hidden ? "translateY(-100%)" : "translateY(0)",
-        background: "rgba(10, 15, 30, 0.75)",
+        position: "sticky",
+        top: 0,
+        zIndex: 100,
+        width: "100%",
+        background: "rgba(8,8,8,0.85)",
         backdropFilter: "blur(24px)",
         WebkitBackdropFilter: "blur(24px)",
-        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        borderBottom: "1px solid #141414",
+        boxShadow: scrolled ? "0 8px 40px rgba(0,0,0,0.5)" : "none",
+        transition: "box-shadow 0.3s ease",
       }}
     >
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+      <div
+        style={{
+          maxWidth: 1100,
+          margin: "0 auto",
+          padding: "20px 48px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
         {/* Logo */}
-        <div className="flex items-center gap-2.5">
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 20 20"
-            fill="none"
-            aria-hidden
-          >
-            <path
-              d="M10 1L13 7.5H19L14 11.5L16 18L10 14L4 18L6 11.5L1 7.5H7L10 1Z"
-              fill="#00E87A"
-              stroke="#00E87A"
-              strokeWidth="0.5"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <span
-            className="text-lg font-bold tracking-tight"
-            style={{ color: "#F0F4FF", letterSpacing: "-0.03em" }}
-          >
-            Applyn
-          </span>
-        </div>
-
-        {/* Badge */}
-        <p
-          className="text-xs font-medium"
-          style={{ color: "#8892A4", letterSpacing: "0.01em" }}
+        <span
+          style={{
+            color: "#fff",
+            fontSize: 18,
+            fontWeight: 700,
+            letterSpacing: "-0.02em",
+          }}
         >
-          Powered by{" "}
-          <span style={{ color: "#00E87A" }}>Claude</span>
-          {" + "}
-          <span style={{ color: "#00B8D4" }}>LangGraph</span>
-        </p>
+          Applyn
+        </span>
+
+        {/* Centre links */}
+        <nav style={{ display: "flex", gap: 40 }}>
+          {NAV_LINKS.map((link) => (
+            <a
+              key={link}
+              href="#"
+              style={{
+                color: "#555",
+                fontSize: 14,
+                textDecoration: "none",
+                transition: "color 0.2s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#fff")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#555")}
+            >
+              {link}
+            </a>
+          ))}
+        </nav>
+
+        {/* CTA */}
+        <a
+          href="#upload"
+          style={{
+            background: "#00FF87",
+            color: "#000",
+            fontWeight: 600,
+            fontSize: 14,
+            padding: "10px 20px",
+            borderRadius: 8,
+            textDecoration: "none",
+            transition: "filter 0.2s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(1.1)")}
+          onMouseLeave={(e) => (e.currentTarget.style.filter = "brightness(1)")}
+        >
+          Get started free →
+        </a>
       </div>
     </header>
   )
