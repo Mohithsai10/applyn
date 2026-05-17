@@ -51,8 +51,6 @@ def test_analyze_rejects_ftp_url() -> None:
 
 def test_pii_redaction_middleware() -> None:
     """Confirm the middleware strips emails before they reach the route."""
-    # /analyze will fail with 400 (bad URL) but the body was processed by middleware.
-    # We indirectly verify no exception is raised by the middleware itself.
     response = client.post(
         "/analyze",
         json={
@@ -62,3 +60,10 @@ def test_pii_redaction_middleware() -> None:
     )
     # 400 from URL validation means middleware passed the request through cleanly.
     assert response.status_code == 400
+
+
+def test_download_resume_unknown_session() -> None:
+    """Requesting a PDF for a session that has never run the agent returns 404."""
+    response = client.post("/download/resume/nonexistent-session-id-xyz")
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()

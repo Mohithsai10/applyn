@@ -74,6 +74,19 @@ def retrieve_bullets(skills: list[str], n_results: int = 3) -> list[str]:
     return bullets
 
 
+def retrieve_candidate_name() -> str:
+    """Return the candidate name stored in the most recent resume embedding."""
+    collection = _bullets_collection()
+    try:
+        results = collection.get(limit=1, include=["metadatas"])
+        metadatas = results.get("metadatas") or []
+        if metadatas and metadatas[0]:
+            return metadatas[0].get("candidate_name", "Candidate")
+    except Exception:
+        pass
+    return "Candidate"
+
+
 # ── Resume ingestion ──────────────────────────────────────────────────────────
 
 def _extract_text(file_path: str) -> str:
@@ -89,6 +102,29 @@ def _extract_text(file_path: str) -> str:
     raise ValueError(f"Unsupported file type: {suffix}")
 
 
+def _extract_candidate_name(text: str) -> str:
+    """Heuristic: first line that looks like a person's name (2+ words, no digits/URLs)."""
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or not (3 <= len(line) <= 60):
+            continue
+        if " " not in line:
+            continue
+        if re.search(r"\d", line):
+            continue
+        if "@" in line or "http" in line.lower() or "www." in line.lower():
+            continue
+        if line.isupper():
+            continue
+        low = line.lower()
+        skip_words = ("resume", "curriculum", "vitae", "objective", "summary",
+                      "skills", "experience", "education", "profile")
+        if any(w in low for w in skip_words):
+            continue
+        return line
+    return "Candidate"
+
+
 def _split_bullets(text: str) -> list[str]:
     chunks: list[str] = []
     for line in text.splitlines():
@@ -101,10 +137,16 @@ def _split_bullets(text: str) -> list[str]:
 def embed_resume(file_path: str) -> dict[str, object]:
     file_name = Path(file_path).name
     text = _extract_text(file_path)
+    candidate_name = _extract_candidate_name(text)
     chunks = _split_bullets(text)
 
     if not chunks:
-        return {"success": True, "chunks_stored": 0, "file_name": file_name}
+        return {
+            "success": True,
+            "chunks_stored": 0,
+            "file_name": file_name,
+            "candidate_name": candidate_name,
+        }
 
     collection = _bullets_collection()
     ids = [f"{file_name}_chunk_{i}" for i in range(len(chunks))]
@@ -114,8 +156,14 @@ def embed_resume(file_path: str) -> dict[str, object]:
             "full_text": chunk,
             "file_name": file_name,
             "char_count": len(chunk),
+            "candidate_name": candidate_name,
         }
         for i, chunk in enumerate(chunks)
     ]
     collection.upsert(documents=chunks, ids=ids, metadatas=metadatas)
-    return {"success": True, "chunks_stored": len(chunks), "file_name": file_name}
+    return {
+        "success": True,
+        "chunks_stored": len(chunks),
+        "file_name": file_name,
+        "candidate_name": candidate_name,
+    }

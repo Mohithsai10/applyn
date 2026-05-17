@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from tavily import TavilyClient
 
 from src.rag.store import retrieve_bullets as rag_retrieve_bullets
+from src.rag.store import retrieve_candidate_name as rag_retrieve_candidate_name
 
 load_dotenv()
 
@@ -42,11 +43,14 @@ class GraphState(TypedDict):
     top_skills: list[str]
     company_name: str
     seniority_level: str
+    candidate_name: str
     relevant_bullets: list[str]
     rewritten_bullets: list[str]
     ats_score_before: float
     ats_score_after: float
+    formatted_resume: str
     cover_letter: str
+    interview_questions: list[str]
     error: str
     retry_count: int
 
@@ -119,8 +123,6 @@ async def scrape_job(state: GraphState) -> dict:
 
 async def analyze_jd(state: GraphState) -> dict:
     raw = (_PROMPTS / "analyze_jd.txt").read_text()
-    # Split instructions from the JD placeholder so the schema-guided LLM sees
-    # clean instructions in the system turn and the raw JD in the human turn.
     instructions = raw.split("---\nJOB DESCRIPTION:")[0].strip()
     structured_llm = _llm.with_structured_output(JobAnalysis)
     result: JobAnalysis = await structured_llm.ainvoke(
@@ -138,7 +140,8 @@ async def analyze_jd(state: GraphState) -> dict:
 
 async def retrieve_bullets_node(state: GraphState) -> dict:
     bullets = rag_retrieve_bullets(state["top_skills"])
-    return {"relevant_bullets": bullets}
+    candidate_name = rag_retrieve_candidate_name()
+    return {"relevant_bullets": bullets, "candidate_name": candidate_name}
 
 
 async def rewrite_bullets(state: GraphState) -> dict:
@@ -172,6 +175,43 @@ async def score_ats(state: GraphState) -> dict:
     return {"ats_score_before": before, "ats_score_after": after}
 
 
+async def format_resume(state: GraphState) -> dict:
+    template = (_PROMPTS / "resume_format.txt").read_text()
+
+    candidate_name = state.get("candidate_name") or "Candidate"
+    skills = state.get("top_skills", [])
+    job_title = (
+        f"{state.get('seniority_level', '')} {skills[0] if skills else ''}".strip()
+        or "Software Engineer"
+    )
+    company_name = state.get("company_name") or "the company"
+
+    # Use str.replace so only the three known input placeholders are substituted;
+    # the remaining {location}, {phone}, … in the OUTPUT section stay literal for Claude.
+    system_prompt = (
+        template
+        .replace("{candidate_name}", candidate_name)
+        .replace("{job_title}", job_title)
+        .replace("{company_name}", company_name)
+    )
+
+    bullets_block = "\n".join(f"- {b}" for b in state.get("rewritten_bullets", []))
+    skills_block = ", ".join(skills)
+    original_block = "\n".join(state.get("relevant_bullets", []))
+
+    human_content = (
+        f"JOB DESCRIPTION:\n{state['job_description'][:3_000]}\n\n"
+        f"REQUIRED SKILLS:\n{skills_block}\n\n"
+        f"ORIGINAL RESUME BULLETS:\n{original_block}\n\n"
+        f"AI-REWRITTEN BULLETS (use these):\n{bullets_block}"
+    )
+
+    response = await _llm.ainvoke(
+        [SystemMessage(content=system_prompt), HumanMessage(content=human_content)]
+    )
+    return {"formatted_resume": response.content.strip()}
+
+
 async def generate_cover(state: GraphState) -> dict:
     news_snippet = ""
     try:
@@ -199,14 +239,46 @@ async def generate_cover(state: GraphState) -> dict:
     return {"cover_letter": response.content.strip()}
 
 
+async def gen_interview_questions(state: GraphState) -> dict:
+    bullets_block = "\n".join(f"- {b}" for b in state.get("rewritten_bullets", []))
+    prompt = (
+        "Based on this job description and the candidate's rewritten resume, "
+        "generate exactly 10 likely interview questions the hiring manager will ask. "
+        "Mix behavioral (STAR format), technical, and situational questions. "
+        "Return ONLY a JSON array of 10 strings, no other text.\n\n"
+        f"JOB DESCRIPTION:\n{state['job_description'][:2_000]}\n\n"
+        f"REWRITTEN RESUME BULLETS:\n{bullets_block}"
+    )
+    response = await _llm.ainvoke([HumanMessage(content=prompt)])
+    text = response.content.strip()
+    # Extract JSON array from anywhere in the response
+    for pattern in (r"\[.*\]", r"\[.*?\]"):
+        match = re.search(pattern, text, re.DOTALL)
+        if match:
+            try:
+                questions = json.loads(match.group())
+                if isinstance(questions, list):
+                    return {"interview_questions": [str(q) for q in questions[:10]]}
+            except (json.JSONDecodeError, ValueError):
+                continue
+    # Last resort: try parsing the whole response
+    try:
+        questions = json.loads(text)
+        if isinstance(questions, list):
+            return {"interview_questions": [str(q) for q in questions[:10]]}
+    except (json.JSONDecodeError, ValueError):
+        pass
+    return {"interview_questions": []}
+
+
 # ── Routing ───────────────────────────────────────────────────────────────────
 
 def _route_after_score(
     state: GraphState,
-) -> Literal["rewrite_bullets", "generate_cover"]:
+) -> Literal["rewrite_bullets", "format_resume"]:
     if state["ats_score_after"] < 0.70 and state.get("retry_count", 0) < 2:
         return "rewrite_bullets"
-    return "generate_cover"
+    return "format_resume"
 
 
 # ── Graph construction ────────────────────────────────────────────────────────
@@ -219,7 +291,9 @@ def build_graph() -> StateGraph:
     builder.add_node("retrieve_bullets", retrieve_bullets_node)
     builder.add_node("rewrite_bullets", rewrite_bullets)
     builder.add_node("score_ats", score_ats)
+    builder.add_node("format_resume", format_resume)
     builder.add_node("generate_cover", generate_cover)
+    builder.add_node("interview_questions", gen_interview_questions)
 
     builder.add_edge(START, "scrape_job")
     builder.add_edge("scrape_job", "analyze_jd")
@@ -227,7 +301,9 @@ def build_graph() -> StateGraph:
     builder.add_edge("retrieve_bullets", "rewrite_bullets")
     builder.add_edge("rewrite_bullets", "score_ats")
     builder.add_conditional_edges("score_ats", _route_after_score)
-    builder.add_edge("generate_cover", END)
+    builder.add_edge("format_resume", "generate_cover")
+    builder.add_edge("generate_cover", "interview_questions")
+    builder.add_edge("interview_questions", END)
 
     return builder
 
@@ -236,7 +312,7 @@ _checkpointer = MemorySaver()
 _compiled = build_graph().compile(checkpointer=_checkpointer)
 
 
-# ── Public entry point ────────────────────────────────────────────────────────
+# ── Public entry points ───────────────────────────────────────────────────────
 
 async def run_agent(job_url: str, session_id: str) -> GraphState:
     config = {"configurable": {"thread_id": session_id}}
@@ -246,13 +322,25 @@ async def run_agent(job_url: str, session_id: str) -> GraphState:
         "top_skills": [],
         "company_name": "",
         "seniority_level": "",
+        "candidate_name": "",
         "relevant_bullets": [],
         "rewritten_bullets": [],
         "ats_score_before": 0.0,
         "ats_score_after": 0.0,
+        "formatted_resume": "",
         "cover_letter": "",
+        "interview_questions": [],
         "error": "",
         "retry_count": 0,
     }
     result: GraphState = await _compiled.ainvoke(initial, config=config)
     return result
+
+
+def get_state_for_session(session_id: str) -> GraphState | None:
+    """Retrieve persisted state from the MemorySaver checkpointer."""
+    config = {"configurable": {"thread_id": session_id}}
+    snapshot = _compiled.get_state(config)
+    if snapshot and snapshot.values:
+        return snapshot.values  # type: ignore[return-value]
+    return None

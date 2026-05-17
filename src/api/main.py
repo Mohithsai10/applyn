@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import logging
 import os
 import re
@@ -12,7 +13,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -136,11 +137,14 @@ class AnalyzeResponse(BaseModel):
     top_skills: list[str]
     company_name: str
     seniority_level: str
+    candidate_name: str
     relevant_bullets: list[str]
     rewritten_bullets: list[str]
     ats_score_before: float
     ats_score_after: float
+    formatted_resume: str
     cover_letter: str
+    interview_questions: list[str]
     error: str
     retry_count: int
 
@@ -156,6 +160,93 @@ def _is_valid_url(url: str) -> bool:
 
 
 _ALLOWED_SUFFIXES = {".pdf", ".docx"}
+
+
+def _build_resume_pdf(formatted_resume: str) -> bytes:
+    """Render the plain-text formatted resume into a letter-size PDF."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=letter,
+        leftMargin=0.5 * inch,
+        rightMargin=0.5 * inch,
+        topMargin=0.5 * inch,
+        bottomMargin=0.5 * inch,
+    )
+
+    name_style = ParagraphStyle(
+        "Name", fontName="Helvetica-Bold", fontSize=16, spaceAfter=4
+    )
+    contact_style = ParagraphStyle(
+        "Contact", fontName="Helvetica", fontSize=10, spaceAfter=6
+    )
+    section_style = ParagraphStyle(
+        "Section", fontName="Helvetica-Bold", fontSize=11, spaceBefore=10, spaceAfter=3
+    )
+    body_style = ParagraphStyle(
+        "Body", fontName="Helvetica", fontSize=10, spaceAfter=2, leading=14
+    )
+    bullet_style = ParagraphStyle(
+        "Bullet", fontName="Helvetica", fontSize=10, leftIndent=14, spaceAfter=2, leading=14
+    )
+
+    story = []
+    first_line = True
+    second_line = False
+
+    for raw_line in formatted_resume.strip().splitlines():
+        stripped = raw_line.strip()
+
+        if not stripped:
+            story.append(Spacer(1, 3))
+            continue
+
+        if first_line:
+            story.append(Paragraph(_rl_escape(stripped), name_style))
+            first_line = False
+            second_line = True
+            continue
+
+        if second_line:
+            story.append(Paragraph(_rl_escape(stripped), contact_style))
+            second_line = False
+            continue
+
+        # Section headers are ALL CAPS (isupper() ignores non-alpha chars)
+        if stripped.isupper():
+            story.append(
+                HRFlowable(
+                    width="100%",
+                    thickness=0.5,
+                    color=colors.HexColor("#333333"),
+                    spaceAfter=3,
+                )
+            )
+            story.append(Paragraph(_rl_escape(stripped), section_style))
+            continue
+
+        # Bullet points
+        if stripped.startswith(("-", "•")):
+            text = stripped.lstrip("-•").strip()
+            story.append(Paragraph(f"• {_rl_escape(text)}", bullet_style))
+            continue
+
+        story.append(Paragraph(_rl_escape(stripped), body_style))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf.read()
+
+
+def _rl_escape(text: str) -> str:
+    """Escape characters that ReportLab's Paragraph XML parser would misinterpret."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -175,7 +266,6 @@ async def upload_resume(request: Request, file: UploadFile) -> UploadResumeRespo
             detail=f"Unsupported file type '{suffix}'. Only .pdf and .docx are accepted.",
         )
 
-    # Lazy import avoids circular dependency at module load.
     from src.rag.store import embed_resume
 
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -231,3 +321,45 @@ async def analyze(request: Request, body: AnalyzeRequest) -> AnalyzeResponse:
         raise HTTPException(status_code=500, detail=state["error"])
 
     return AnalyzeResponse(**state)
+
+
+@app.post("/download/resume/{session_id}")
+async def download_resume(session_id: str, request: Request) -> StreamingResponse:
+    from src.agents.graph import get_state_for_session
+
+    state = get_state_for_session(session_id)
+    if not state:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found. Run /analyze first.",
+        )
+
+    formatted_resume = state.get("formatted_resume", "")
+    if not formatted_resume:
+        raise HTTPException(
+            status_code=404,
+            detail="No formatted resume for this session. Run /analyze first.",
+        )
+
+    candidate_name = state.get("candidate_name") or "Candidate"
+    company_name = state.get("company_name") or "Company"
+
+    safe_name = re.sub(r"[^\w\s-]", "", candidate_name).strip().replace(" ", "_")
+    safe_company = re.sub(r"[^\w\s-]", "", company_name).strip().replace(" ", "_")
+    filename = f"{safe_name}_{safe_company}_Resume.pdf"
+
+    try:
+        pdf_bytes = _build_resume_pdf(formatted_resume)
+    except Exception as exc:
+        log.exception("PDF generation failed for session %s", session_id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"PDF generation failed: {type(exc).__name__}: {exc}",
+        )
+
+    log.info("Generated resume PDF (%d bytes) for session %s", len(pdf_bytes), session_id)
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
