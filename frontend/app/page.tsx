@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import IntroSplash from "@/components/IntroSplash"
 import AnimatedBackground from "@/components/AnimatedBackground"
 import CursorFollower from "@/components/CursorFollower"
 import Navbar from "@/components/Navbar"
@@ -30,9 +31,11 @@ export interface AnalyzeResponse {
 export default function Home() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [results, setResults] = useState<AnalyzeResponse | null>(null)
+  const [splashDone, setSplashDone] = useState(false)
 
   return (
     <>
+      {!splashDone && <IntroSplash onComplete={() => setSplashDone(true)} />}
       <AnimatedBackground />
       <CursorFollower />
       <div style={{ position: "relative", zIndex: 1 }}>

@@ -12,8 +12,8 @@ export default function CursorFollower() {
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
-      x.set(e.clientX - 10)
-      y.set(e.clientY - 10)
+      x.set(e.clientX - 6)
+      y.set(e.clientY - 6)
     }
     const onOver = (e: MouseEvent) => {
       if ((e.target as Element).closest('button, a, input, textarea, [role="button"]')) {
@@ -43,19 +43,15 @@ export default function CursorFollower() {
         left: 0,
         x: springX,
         y: springY,
-        width: 20,
-        height: 20,
+        width: 12,
+        height: 12,
         borderRadius: "50%",
-        border: "1.5px solid rgba(0,255,135,0.6)",
+        border: "1px solid rgba(0,255,135,0.5)",
+        background: "transparent",
         pointerEvents: "none",
         zIndex: 9999,
       }}
-      animate={{
-        scale: hovered ? 2.5 : 1,
-        background: hovered
-          ? "rgba(0,255,135,0.2)"
-          : "rgba(0,255,135,0.1)",
-      }}
+      animate={{ scale: hovered ? 2 : 1 }}
       transition={{ duration: 0.15 }}
     />
   )
