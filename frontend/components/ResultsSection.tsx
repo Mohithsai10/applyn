@@ -1,11 +1,15 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import type { AnalyzeResponse } from "@/app/page"
+import type { AnalyzeResult } from "@/lib/api"
 
 interface Props {
-  results: AnalyzeResponse
+  results: AnalyzeResult
+  sessionId: string
+  onDownloadResume: () => Promise<void>
+  onDownloadCover: () => void
+  downloadingResume: boolean
 }
 
 function useCountUp(target: number, delay = 0) {
@@ -52,9 +56,7 @@ function ScoreCard({
       style={{
         flex: 1,
         background: highlight ? "rgba(0,255,135,0.03)" : "#111",
-        border: highlight
-          ? "1px solid rgba(0,255,135,0.3)"
-          : "1px solid #1a1a1a",
+        border: highlight ? "1px solid rgba(0,255,135,0.3)" : "1px solid #1a1a1a",
         boxShadow: highlight ? "0 0 40px rgba(0,255,135,0.1)" : "none",
       }}
     >
@@ -111,7 +113,6 @@ function ScoreCard({
           </motion.span>
         )}
       </div>
-      {/* Progress bar */}
       <div
         style={{
           marginTop: 16,
@@ -150,17 +151,12 @@ function BulletCard({
       className="card-dark"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 280, damping: 28, delay: index * 0.08 }}
+      transition={{ type: "spring", stiffness: 280, damping: 28, delay: index * 0.07 }}
       style={{ padding: 0, overflow: "hidden" }}
     >
       <div
         className="two-col"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          borderRadius: 16,
-          overflow: "hidden",
-        }}
+        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderRadius: 16, overflow: "hidden" }}
       >
         <div style={{ padding: 24, borderRight: "1px solid #1a1a1a" }}>
           <p
@@ -199,11 +195,32 @@ function BulletCard({
   )
 }
 
-export default function ResultsSection({ results }: Props) {
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h3
+      style={{
+        fontSize: 22,
+        fontWeight: 700,
+        color: "#fff",
+        letterSpacing: "-0.02em",
+        marginBottom: 20,
+      }}
+    >
+      {children}
+    </h3>
+  )
+}
+
+export default function ResultsSection({
+  results,
+  onDownloadResume,
+  onDownloadCover,
+  downloadingResume,
+}: Props) {
   const [copied, setCopied] = useState(false)
+
   const deltaPct =
-    Math.round(results.ats_score_after * 100) -
-    Math.round(results.ats_score_before * 100)
+    Math.round(results.ats_score_after * 100) - Math.round(results.ats_score_before * 100)
 
   const copyLetter = () => {
     navigator.clipboard.writeText(results.cover_letter).then(() => {
@@ -212,66 +229,90 @@ export default function ResultsSection({ results }: Props) {
     })
   }
 
-  const downloadText = (content: string, filename: string) => {
-    const blob = new Blob([content], { type: "text/plain" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = filename
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   return (
     <section className="section" style={{ background: "#080808" }}>
       <div className="container" style={{ display: "flex", flexDirection: "column", gap: 64 }}>
-        {/* ATS Scores */}
-        <div>
-          <div style={{ textAlign: "center", marginBottom: 40 }}>
-            <span className="badge">Results</span>
-            <h2
+
+        {/* ── 1. Header ─────────────────────────────────────────── */}
+        <div style={{ textAlign: "center" }}>
+          <span className="badge">Results</span>
+          <h2
+            style={{
+              fontSize: "clamp(32px, 4vw, 48px)",
+              fontWeight: 800,
+              letterSpacing: "-0.03em",
+              color: "#fff",
+              marginTop: 16,
+              lineHeight: 1.1,
+            }}
+          >
+            Your tailored application
+          </h2>
+          {results.candidate_name && results.candidate_name !== "Candidate" && (
+            <p style={{ color: "#555", fontSize: 18, marginTop: 12 }}>
+              for{" "}
+              <span style={{ color: "#fff", fontWeight: 600 }}>{results.candidate_name}</span>
+              {results.company_name && (
+                <>
+                  {" "}→{" "}
+                  <span style={{ color: "#00FF87", fontWeight: 600 }}>{results.company_name}</span>
+                </>
+              )}
+              {results.seniority_level && (
+                <span style={{ color: "#555" }}> · {results.seniority_level}</span>
+              )}
+            </p>
+          )}
+          {results.top_skills.length > 0 && (
+            <div
               style={{
-                fontSize: "clamp(32px, 4vw, 48px)",
-                fontWeight: 800,
-                letterSpacing: "-0.03em",
-                color: "#fff",
-                marginTop: 16,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                justifyContent: "center",
+                marginTop: 20,
               }}
             >
-              Your tailored application
-            </h2>
-          </div>
-          <div style={{ display: "flex", gap: 24 }}>
-            <ScoreCard
-              label="ATS Score Before"
-              score={results.ats_score_before}
-              delay={0}
-              highlight={false}
-            />
-            <ScoreCard
-              label="ATS Score After"
-              score={results.ats_score_after}
-              delay={0.15}
-              highlight
-              delta={deltaPct > 0 ? deltaPct : undefined}
-            />
-          </div>
+              {results.top_skills.map((skill) => (
+                <span
+                  key={skill}
+                  style={{
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid #1a1a1a",
+                    color: "#888",
+                    fontSize: 12,
+                    padding: "5px 14px",
+                    borderRadius: 999,
+                  }}
+                >
+                  {skill}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Rewritten Bullets */}
+        {/* ── 2. ATS Scores ─────────────────────────────────────── */}
+        <div style={{ display: "flex", gap: 24 }}>
+          <ScoreCard
+            label="ATS Score Before"
+            score={results.ats_score_before}
+            delay={0}
+            highlight={false}
+          />
+          <ScoreCard
+            label="ATS Score After"
+            score={results.ats_score_after}
+            delay={0.15}
+            highlight
+            delta={deltaPct > 0 ? deltaPct : undefined}
+          />
+        </div>
+
+        {/* ── 3. Rewritten Bullets ──────────────────────────────── */}
         {results.rewritten_bullets.length > 0 && (
           <div>
-            <h3
-              style={{
-                fontSize: 22,
-                fontWeight: 700,
-                color: "#fff",
-                letterSpacing: "-0.02em",
-                marginBottom: 20,
-              }}
-            >
-              Rewritten bullets
-            </h3>
+            <SectionHeading>Rewritten bullets</SectionHeading>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {results.rewritten_bullets.map((rb, i) => (
                 <BulletCard
@@ -285,20 +326,18 @@ export default function ResultsSection({ results }: Props) {
           </div>
         )}
 
-        {/* Cover Letter */}
+        {/* ── 4. Cover Letter ───────────────────────────────────── */}
         {results.cover_letter && (
           <div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-              <h3
-                style={{
-                  fontSize: 22,
-                  fontWeight: 700,
-                  color: "#fff",
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                Cover letter
-              </h3>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 20,
+              }}
+            >
+              <SectionHeading>Cover letter</SectionHeading>
               <motion.button
                 onClick={copyLetter}
                 whileHover={{ scale: 1.02 }}
@@ -313,6 +352,7 @@ export default function ResultsSection({ results }: Props) {
                   borderRadius: 8,
                   cursor: "pointer",
                   transition: "all 0.2s",
+                  flexShrink: 0,
                 }}
               >
                 {copied ? "✓ Copied" : "Copy"}
@@ -330,7 +370,6 @@ export default function ResultsSection({ results }: Props) {
                   fontSize: 14,
                   lineHeight: 1.8,
                   color: "#ccc",
-                  fontFamily: "var(--font-inter), monospace",
                 }}
               >
                 {results.cover_letter}
@@ -339,32 +378,96 @@ export default function ResultsSection({ results }: Props) {
           </div>
         )}
 
-        {/* Export buttons */}
+        {/* ── 5. Interview Questions ────────────────────────────── */}
+        {results.interview_questions.length > 0 && (
+          <div>
+            <SectionHeading>Likely interview questions</SectionHeading>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {results.interview_questions.map((q, i) => (
+                <motion.div
+                  key={i}
+                  className="card-dark"
+                  initial={{ opacity: 0, x: -16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 280,
+                    damping: 28,
+                    delay: i * 0.05,
+                  }}
+                  style={{ padding: "18px 24px", display: "flex", gap: 16, alignItems: "flex-start" }}
+                >
+                  <span
+                    style={{
+                      minWidth: 28,
+                      height: 28,
+                      borderRadius: "50%",
+                      background: "rgba(0,255,135,0.06)",
+                      border: "1px solid rgba(0,255,135,0.15)",
+                      color: "#00FF87",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                      marginTop: 1,
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  <p style={{ fontSize: 14, color: "#ccc", lineHeight: 1.6 }}>{q}</p>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── 6. Downloads ──────────────────────────────────────── */}
         <div style={{ display: "flex", gap: 12 }}>
           <motion.button
-            onClick={() => downloadText(results.rewritten_bullets.join("\n"), "resume-tailored.txt")}
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.97 }}
+            onClick={onDownloadResume}
+            disabled={downloadingResume}
+            whileHover={!downloadingResume ? { scale: 1.01 } : {}}
+            whileTap={!downloadingResume ? { scale: 0.97 } : {}}
             style={{
               flex: 1,
               height: 52,
-              background: "#00FF87",
-              color: "#000",
+              background: downloadingResume ? "#0d0d0d" : "#00FF87",
+              color: downloadingResume ? "#333" : "#000",
               fontWeight: 700,
               fontSize: 15,
               border: "none",
               borderRadius: 10,
-              cursor: "pointer",
+              cursor: downloadingResume ? "default" : "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
+              transition: "background 0.2s, color 0.2s",
             }}
           >
-            ↓ Download Resume
+            {downloadingResume ? (
+              <>
+                <div
+                  style={{
+                    width: 14,
+                    height: 14,
+                    border: "2px solid #333",
+                    borderTop: "2px solid #555",
+                    borderRadius: "50%",
+                    animation: "spin 0.8s linear infinite",
+                  }}
+                />
+                Generating PDF…
+              </>
+            ) : (
+              "↓ Download Resume PDF"
+            )}
           </motion.button>
+
           <motion.button
-            onClick={() => downloadText(results.cover_letter, "cover-letter.txt")}
+            onClick={onDownloadCover}
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.97 }}
             style={{
@@ -389,6 +492,7 @@ export default function ResultsSection({ results }: Props) {
             ↓ Download Cover Letter
           </motion.button>
         </div>
+
       </div>
     </section>
   )

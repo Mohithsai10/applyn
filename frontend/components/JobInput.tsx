@@ -1,91 +1,34 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import ProgressSteps, { STEPS } from "@/components/ProgressSteps"
-import type { AnalyzeResponse } from "@/app/page"
-
-const API = "http://localhost:8000"
-const STEP_INTERVAL_MS = 5000
+import ProgressSteps from "@/components/ProgressSteps"
 
 interface Props {
-  sessionId: string | null
-  onResults: (results: AnalyzeResponse) => void
+  onAnalyze: (url: string) => Promise<void>
+  analyzing: boolean
+  disabled: boolean
+  slowWarning: boolean
+  analyzeError: string | null
+  currentStep: number
 }
 
-type LoadState = "idle" | "loading" | "error"
-
-export default function JobInput({ sessionId, onResults }: Props) {
+export default function JobInput({
+  onAnalyze,
+  analyzing,
+  disabled,
+  slowWarning,
+  analyzeError,
+  currentStep,
+}: Props) {
   const [url, setUrl] = useState("")
   const [focused, setFocused] = useState(false)
-  const [loadState, setLoadState] = useState<LoadState>("idle")
-  const [currentStep, setCurrentStep] = useState(-1)
-  const [errorMsg, setErrorMsg] = useState("")
-  const stepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const pendingResultRef = useRef<AnalyzeResponse | null>(null)
 
-  useEffect(() => () => { if (stepTimerRef.current) clearInterval(stepTimerRef.current) }, [])
+  const canAnalyze = !disabled && !analyzing && url.trim().length > 0
 
-  const fastForwardSteps = useCallback(
-    (fromStep: number) => {
-      if (stepTimerRef.current) clearInterval(stepTimerRef.current)
-      let s = fromStep + 1
-      const fast = setInterval(() => {
-        setCurrentStep(s)
-        s++
-        if (s >= STEPS.length) {
-          clearInterval(fast)
-          setTimeout(() => {
-            if (pendingResultRef.current) {
-              onResults(pendingResultRef.current)
-              setLoadState("idle")
-              setCurrentStep(-1)
-            }
-          }, 600)
-        }
-      }, 250)
-    },
-    [onResults]
-  )
-
-  const handleAnalyze = useCallback(async () => {
-    if (!sessionId || !url.trim()) return
-    setLoadState("loading")
-    setErrorMsg("")
-    setCurrentStep(0)
-    pendingResultRef.current = null
-
-    let step = 0
-    stepTimerRef.current = setInterval(() => {
-      step++
-      if (step < STEPS.length) {
-        setCurrentStep(step)
-      } else {
-        if (stepTimerRef.current) clearInterval(stepTimerRef.current)
-        setCurrentStep(STEPS.length - 1)
-      }
-    }, STEP_INTERVAL_MS)
-
-    try {
-      const res = await fetch(`${API}/analyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job_url: url.trim(), session_id: sessionId }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail ?? "Analysis failed")
-      pendingResultRef.current = data
-      setCurrentStep((cs) => { fastForwardSteps(cs); return cs })
-    } catch (err: unknown) {
-      if (stepTimerRef.current) clearInterval(stepTimerRef.current)
-      setLoadState("error")
-      setCurrentStep(-1)
-      setErrorMsg(err instanceof Error ? err.message : "Something went wrong")
-    }
-  }, [sessionId, url, fastForwardSteps])
-
-  const isLoading = loadState === "loading"
-  const canAnalyze = !!sessionId && url.trim().length > 0 && !isLoading
+  const handleSubmit = () => {
+    if (canAnalyze) onAnalyze(url.trim())
+  }
 
   return (
     <section id="analyze" className="section" style={{ background: "#080808" }}>
@@ -103,7 +46,7 @@ export default function JobInput({ sessionId, onResults }: Props) {
           <div>
             <div
               className="card-dark"
-              style={{ display: "flex", flexDirection: "column", gap: 16, position: "relative" }}
+              style={{ display: "flex", flexDirection: "column", gap: 16 }}
             >
               <span className="badge" style={{ alignSelf: "flex-start" }}>Step 02</span>
 
@@ -113,9 +56,9 @@ export default function JobInput({ sessionId, onResults }: Props) {
                 onChange={(e) => setUrl(e.target.value)}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
-                onKeyDown={(e) => e.key === "Enter" && canAnalyze && handleAnalyze()}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
                 placeholder="https://linkedin.com/jobs/view/…"
-                disabled={isLoading}
+                disabled={analyzing}
                 style={{
                   width: "100%",
                   height: 56,
@@ -133,7 +76,7 @@ export default function JobInput({ sessionId, onResults }: Props) {
 
               <motion.button
                 type="button"
-                onClick={handleAnalyze}
+                onClick={handleSubmit}
                 disabled={!canAnalyze}
                 whileTap={canAnalyze ? { scale: 0.97 } : {}}
                 style={{
@@ -153,7 +96,7 @@ export default function JobInput({ sessionId, onResults }: Props) {
                   gap: 8,
                 }}
               >
-                {isLoading ? (
+                {analyzing ? (
                   <>
                     <div
                       style={{
@@ -172,21 +115,31 @@ export default function JobInput({ sessionId, onResults }: Props) {
                 )}
               </motion.button>
 
-              {!sessionId && (
+              {disabled && !analyzing && (
                 <p style={{ color: "#333", fontSize: 13, textAlign: "center" }}>
                   Upload your resume above first
                 </p>
               )}
 
               <AnimatePresence>
-                {loadState === "error" && (
+                {slowWarning && analyzing && (
+                  <motion.p
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    style={{ color: "#555", fontSize: 13, textAlign: "center" }}
+                  >
+                    Still running — LLM pipelines can take up to 2 minutes…
+                  </motion.p>
+                )}
+                {analyzeError && (
                   <motion.p
                     initial={{ opacity: 0, y: -6 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
                     style={{ color: "rgba(255,77,77,0.9)", fontSize: 13, textAlign: "center" }}
                   >
-                    {errorMsg}
+                    {analyzeError}
                   </motion.p>
                 )}
               </AnimatePresence>
@@ -197,8 +150,13 @@ export default function JobInput({ sessionId, onResults }: Props) {
             </div>
 
             <AnimatePresence>
-              {isLoading && currentStep >= 0 && (
-                <motion.div style={{ marginTop: 16 }}>
+              {analyzing && currentStep >= 0 && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  style={{ marginTop: 16 }}
+                >
                   <ProgressSteps currentStep={currentStep} />
                 </motion.div>
               )}

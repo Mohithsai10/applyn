@@ -3,8 +3,6 @@
 import { useCallback, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 
-const API = "http://localhost:8000"
-
 const FEATURES = [
   "Parses PDF & DOCX formats",
   "Indexes every bullet into AI memory",
@@ -12,46 +10,37 @@ const FEATURES = [
 ]
 
 interface Props {
-  onUpload: (sessionId: string) => void
+  onUpload: (file: File) => Promise<void>
+  uploading: boolean
+  uploaded: boolean
+  chunks: number
+  uploadError: string | null
+  onReset: () => void
 }
 
-type UploadState = "idle" | "dragging" | "uploading" | "success" | "error"
-
-export default function UploadSection({ onUpload }: Props) {
-  const [state, setState] = useState<UploadState>("idle")
+export default function UploadSection({
+  onUpload,
+  uploading,
+  uploaded,
+  chunks,
+  uploadError,
+  onReset,
+}: Props) {
+  const [dragging, setDragging] = useState(false)
   const [fileName, setFileName] = useState("")
-  const [chunks, setChunks] = useState(0)
-  const [error, setError] = useState("")
+  const [localError, setLocalError] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const upload = useCallback(
+  const handleFile = useCallback(
     async (file: File) => {
       const ext = file.name.split(".").pop()?.toLowerCase()
       if (ext !== "pdf" && ext !== "docx") {
-        setError("Only PDF or DOCX files are accepted.")
-        setState("error")
+        setLocalError("Only PDF or DOCX files are accepted.")
         return
       }
+      setLocalError("")
       setFileName(file.name)
-      setState("uploading")
-
-      try {
-        const form = new FormData()
-        form.append("file", file)
-        const res = await fetch(`${API}/upload-resume`, { method: "POST", body: form })
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ detail: "Upload failed" }))
-          throw new Error(body.detail ?? "Upload failed")
-        }
-        const data = await res.json()
-        setChunks(data.chunks_stored ?? data.bullet_count ?? 0)
-        localStorage.setItem("applyn_session_id", data.session_id)
-        setState("success")
-        onUpload(data.session_id)
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "Upload failed")
-        setState("error")
-      }
+      await onUpload(file)
     },
     [onUpload]
   )
@@ -59,15 +48,14 @@ export default function UploadSection({ onUpload }: Props) {
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
-      setState("idle")
+      setDragging(false)
       const file = e.dataTransfer.files[0]
-      if (file) upload(file)
+      if (file) handleFile(file)
     },
-    [upload]
+    [handleFile]
   )
 
-  const isDragging = state === "dragging"
-  const isSuccess = state === "success"
+  const errorMsg = localError || uploadError || ""
 
   return (
     <section id="upload" className="section" style={{ background: "#080808" }}>
@@ -135,7 +123,7 @@ export default function UploadSection({ onUpload }: Props) {
           {/* Right — upload zone */}
           <div>
             <AnimatePresence mode="wait">
-              {isSuccess ? (
+              {uploaded ? (
                 <motion.div
                   key="success"
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -178,7 +166,7 @@ export default function UploadSection({ onUpload }: Props) {
                     ✓ {chunks} bullets indexed into AI memory
                   </p>
                   <button
-                    onClick={() => setState("idle")}
+                    onClick={onReset}
                     style={{
                       marginTop: 8,
                       background: "transparent",
@@ -200,10 +188,10 @@ export default function UploadSection({ onUpload }: Props) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                   className="card-dark"
-                  onClick={() => state !== "uploading" && inputRef.current?.click()}
-                  onDragEnter={(e) => { e.preventDefault(); setState("dragging") }}
-                  onDragOver={(e) => { e.preventDefault(); setState("dragging") }}
-                  onDragLeave={() => setState("idle")}
+                  onClick={() => !uploading && inputRef.current?.click()}
+                  onDragEnter={(e) => { e.preventDefault(); setDragging(true) }}
+                  onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+                  onDragLeave={() => setDragging(false)}
                   onDrop={onDrop}
                   style={{
                     minHeight: 280,
@@ -212,16 +200,17 @@ export default function UploadSection({ onUpload }: Props) {
                     alignItems: "center",
                     justifyContent: "center",
                     gap: 16,
-                    cursor: state === "uploading" ? "default" : "pointer",
-                    border: isDragging
+                    cursor: uploading ? "default" : "pointer",
+                    border: dragging
                       ? "2px dashed #00FF87"
-                      : state === "error"
+                      : errorMsg
                         ? "2px dashed rgba(255,77,77,0.4)"
                         : "2px dashed #1f1f1f",
                     transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-                    boxShadow: isDragging ? "0 0 40px rgba(0,255,135,0.08)" : "none",
+                    boxShadow: dragging ? "0 0 40px rgba(0,255,135,0.08)" : "none",
+                    position: "relative",
                   }}
-                  whileHover={state === "idle" ? { borderColor: "#00FF87" } as never : {}}
+                  whileHover={!uploading ? { borderColor: "#00FF87" } as never : {}}
                 >
                   <input
                     ref={inputRef}
@@ -230,7 +219,7 @@ export default function UploadSection({ onUpload }: Props) {
                     style={{ display: "none" }}
                     onChange={(e) => {
                       const f = e.target.files?.[0]
-                      if (f) upload(f)
+                      if (f) handleFile(f)
                     }}
                   />
 
@@ -238,7 +227,7 @@ export default function UploadSection({ onUpload }: Props) {
                     Step 01
                   </span>
 
-                  {state === "uploading" ? (
+                  {uploading ? (
                     <>
                       <div
                         style={{
@@ -252,11 +241,14 @@ export default function UploadSection({ onUpload }: Props) {
                       />
                       <p style={{ color: "#555", fontSize: 14 }}>Uploading {fileName}…</p>
                     </>
-                  ) : state === "error" ? (
+                  ) : errorMsg ? (
                     <>
-                      <p style={{ color: "rgba(255,77,77,0.9)", fontSize: 14 }}>{error}</p>
+                      <p style={{ color: "rgba(255,77,77,0.9)", fontSize: 14 }}>{errorMsg}</p>
                       <button
-                        onClick={(e) => { e.stopPropagation(); setState("idle") }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setLocalError("")
+                        }}
                         style={{
                           background: "transparent",
                           border: "1px solid #222",
@@ -288,7 +280,7 @@ export default function UploadSection({ onUpload }: Props) {
                         📄
                       </div>
                       <p style={{ color: "#fff", fontWeight: 600, fontSize: 15 }}>
-                        {isDragging ? "Drop it!" : "Drop your resume here"}
+                        {dragging ? "Drop it!" : "Drop your resume here"}
                       </p>
                       <p style={{ color: "#555", fontSize: 13 }}>
                         or{" "}

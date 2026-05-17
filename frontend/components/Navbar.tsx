@@ -71,8 +71,10 @@ export default function Navbar() {
         </nav>
 
         {/* CTA */}
-        <a
-          href="#upload"
+        <button
+          onClick={() =>
+            document.getElementById("upload")?.scrollIntoView({ behavior: "smooth" })
+          }
           style={{
             background: "#00FF87",
             color: "#000",
@@ -80,14 +82,15 @@ export default function Navbar() {
             fontSize: 14,
             padding: "10px 20px",
             borderRadius: 8,
-            textDecoration: "none",
+            border: "none",
+            cursor: "pointer",
             transition: "filter 0.2s",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(1.1)")}
           onMouseLeave={(e) => (e.currentTarget.style.filter = "brightness(1)")}
         >
           Get started free →
-        </a>
+        </button>
       </div>
     </header>
   )
