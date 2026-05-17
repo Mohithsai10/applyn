@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* ── Fonts ──────────────────────────────────────────────────── */
+:root {
+  --font-heading: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  --font-body: 'SF Pro Text', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+}
+
 /* ── Reset ─────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
@@ -10,14 +16,16 @@
 html, body {
   background: #080808;
   color: #fff;
-  font-family: var(--font-body), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-body);
+  font-weight: 300;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
 }
 
 h1, h2, h3, h4 {
-  font-family: var(--font-heading) !important;
+  font-family: var(--font-heading);
+  font-weight: 300;
 }
 
 p, span, div, li, a, button, input, textarea {
