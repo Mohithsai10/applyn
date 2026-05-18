@@ -140,6 +140,16 @@ def embed_resume(file_path: str) -> dict[str, object]:
     candidate_name = _extract_candidate_name(text)
     chunks = _split_bullets(text)
 
+    print(f"[embed_resume] file_path={file_path}")
+    print(f"[embed_resume] extracted text length={len(text)}")
+    print(f"[embed_resume] bullets found={len(chunks)}")
+    print(f"[embed_resume] candidate_name={candidate_name}")
+
+    if not chunks:
+        # Fallback: any line longer than 20 chars
+        chunks = [line.strip() for line in text.splitlines() if len(line.strip()) > 20]
+        print(f"[embed_resume] fallback line split produced {len(chunks)} chunks")
+
     if not chunks:
         return {
             "success": True,

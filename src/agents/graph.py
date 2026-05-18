@@ -94,9 +94,26 @@ def _keyword_overlap(bullets: list[str], skills: list[str]) -> float:
 
 # ── Nodes ─────────────────────────────────────────────────────────────────────
 
+_LINKEDIN_BLOCKS = ("page not found", "authwall", "join linkedin", "sign in to linkedin")
+
+
+def _is_blocked(text: str) -> bool:
+    low = text.lower()
+    return any(marker in low for marker in _LINKEDIN_BLOCKS) or len(text) < 500
+
+
+def _tavily_job_search(url: str) -> str:
+    tavily = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
+    query = f"site:linkedin.com/jobs {url} job description requirements responsibilities"
+    results = tavily.search(query, max_results=3)
+    hits = results.get("results") or []
+    return " ".join(r.get("content", "") for r in hits).strip()
+
+
 async def scrape_job(state: GraphState) -> dict:
     url = state["job_url"]
     delay = 2.0
+    last_text = ""
 
     for attempt in range(3):
         if attempt > 0:
@@ -106,18 +123,31 @@ async def scrape_job(state: GraphState) -> dict:
             resp = requests.get(url, headers=_HEADERS, timeout=15)
             if resp.status_code == 200:
                 text = _clean_html(resp.text)
-                if len(text) >= 300:
+                if text and not _is_blocked(text):
                     return {"job_description": text, "error": ""}
+                last_text = text
 
             text = await _playwright_fetch(url)
-            if len(text) >= 300:
+            if text and not _is_blocked(text):
                 return {"job_description": text, "error": ""}
+            last_text = text
         except Exception as exc:
-            last_exc = str(exc)
+            last_text = str(exc)
+
+    # Direct scraping was blocked — try Tavily as fallback
+    try:
+        text = _tavily_job_search(url)
+        if text and len(text) >= 300:
+            return {"job_description": text, "error": ""}
+    except Exception:
+        pass
 
     return {
         "job_description": "",
-        "error": f"scrape_job failed after 3 attempts: {locals().get('last_exc', 'unknown')}",
+        "error": (
+            "Could not scrape this job posting. "
+            "Try an Indeed or Greenhouse URL instead."
+        ),
     }
 
 
@@ -131,10 +161,13 @@ async def analyze_jd(state: GraphState) -> dict:
             HumanMessage(content=state["job_description"]),
         ]
     )
+    top_skills = [s for s in (result.top_5_skills or []) if s and s != "<UNKNOWN>"]
+    if not top_skills:
+        return {"error": "Could not extract skills from job description"}
     return {
-        "top_skills": result.top_5_skills,
-        "company_name": result.company_name,
-        "seniority_level": result.seniority_level,
+        "top_skills": top_skills,
+        "company_name": result.company_name or "",
+        "seniority_level": result.seniority_level or "",
     }
 
 
