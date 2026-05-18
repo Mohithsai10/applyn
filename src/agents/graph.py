@@ -10,6 +10,7 @@ from typing import Literal, TypedDict
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from urllib.parse import parse_qs, urlparse
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
@@ -105,18 +106,52 @@ def _keyword_overlap(bullets: list[str], skills: list[str]) -> float:
 
 # ── Nodes ─────────────────────────────────────────────────────────────────────
 
-_LINKEDIN_BLOCKS = ("page not found", "authwall", "join linkedin", "sign in to linkedin")
+_BLOCK_MARKERS = (
+    "page not found",
+    "authwall",
+    "join linkedin",
+    "sign in to linkedin",
+    "sign in to view",
+    "please sign in",
+    "access denied",
+    "please enable javascript",
+    "enable javascript to continue",
+    "robot or human",
+    "are you a robot",
+)
 
 
 def _is_blocked(text: str) -> bool:
     low = text.lower()
-    return any(marker in low for marker in _LINKEDIN_BLOCKS) or len(text) < 500
+    return len(text) < 200 or any(m in low for m in _BLOCK_MARKERS)
 
 
-def _tavily_job_search(url: str) -> str:
+def _build_tavily_query(url: str) -> str:
+    """Build the most targeted Tavily query possible from the job URL."""
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+
+    if "indeed.com" in host:
+        jk = (parse_qs(parsed.query).get("jk") or [""])[0]
+        if jk:
+            return f"indeed job {jk} description requirements qualifications responsibilities"
+        return f"indeed job description requirements {url}"
+
+    if "linkedin.com" in host:
+        match = re.search(r"/jobs/view/(\d+)", parsed.path)
+        job_id = match.group(1) if match else ""
+        if job_id:
+            return f"linkedin job {job_id} description requirements responsibilities"
+        return f"site:linkedin.com/jobs {url} job description requirements"
+
+    # Generic fallback — works for Greenhouse, Lever, Workday, etc.
+    return f"job description requirements qualifications responsibilities {url}"
+
+
+def _tavily_fallback(url: str) -> str:
     tavily = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
-    query = f"site:linkedin.com/jobs {url} job description requirements responsibilities"
-    results = tavily.search(query, max_results=3)
+    query = _build_tavily_query(url)
+    results = tavily.search(query, max_results=5)
     hits = results.get("results") or []
     return " ".join(r.get("content", "") for r in hits).strip()
 
@@ -124,7 +159,6 @@ def _tavily_job_search(url: str) -> str:
 async def scrape_job(state: GraphState) -> dict:
     url = state["job_url"]
     delay = 2.0
-    last_text = ""
 
     for attempt in range(3):
         if attempt > 0:
@@ -136,19 +170,17 @@ async def scrape_job(state: GraphState) -> dict:
                 text = _clean_html(resp.text)
                 if text and not _is_blocked(text):
                     return {"job_description": text, "error": ""}
-                last_text = text
 
             text = await _playwright_fetch(url)
             if text and not _is_blocked(text):
                 return {"job_description": text, "error": ""}
-            last_text = text
-        except Exception as exc:
-            last_text = str(exc)
+        except Exception:
+            pass
 
-    # Direct scraping was blocked — try Tavily as fallback
+    # Direct scraping blocked for all attempts — try Tavily for any site
     try:
-        text = _tavily_job_search(url)
-        if text and len(text) >= 300:
+        text = _tavily_fallback(url)
+        if text and len(text) >= 200:
             return {"job_description": text, "error": ""}
     except Exception:
         pass
@@ -156,20 +188,24 @@ async def scrape_job(state: GraphState) -> dict:
     return {
         "job_description": "",
         "error": (
-            "Could not scrape this job posting. "
-            "Try an Indeed or Greenhouse URL instead."
+            "Could not retrieve job description. "
+            "Please try copying the job text manually."
         ),
     }
 
 
 async def analyze_jd(state: GraphState) -> dict:
+    jd = (state.get("job_description") or "").strip()
+    if len(jd) < 50:
+        return {"error": "Job description is empty. Scraping was blocked."}
+
     raw = (_PROMPTS / "analyze_jd.txt").read_text()
     instructions = raw.split("---\nJOB DESCRIPTION:")[0].strip()
     structured_llm = _llm.with_structured_output(JobAnalysis)
     result: JobAnalysis = await structured_llm.ainvoke(
         [
             SystemMessage(content=instructions),
-            HumanMessage(content=state["job_description"]),
+            HumanMessage(content=jd),
         ]
     )
     top_skills = [s for s in (result.top_5_skills or []) if s and s != "<UNKNOWN>"]
@@ -189,6 +225,9 @@ async def retrieve_bullets_node(state: GraphState) -> dict:
 
 
 async def rewrite_bullets(state: GraphState) -> dict:
+    if not state.get("relevant_bullets"):
+        return {"error": "No resume bullets found. Please re-upload your resume."}
+
     template = (_PROMPTS / "rewrite_bullets.txt").read_text()
     rewritten: list[str] = []
 
