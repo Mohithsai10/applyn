@@ -103,25 +103,14 @@ def _extract_text(file_path: str) -> str:
 
 
 def _extract_candidate_name(text: str) -> str:
-    """Heuristic: first line that looks like a person's name (2+ words, no digits/URLs)."""
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or not (3 <= len(line) <= 60):
-            continue
-        if " " not in line:
-            continue
-        if re.search(r"\d", line):
-            continue
-        if "@" in line or "http" in line.lower() or "www." in line.lower():
-            continue
-        if line.isupper():
-            continue
-        low = line.lower()
-        skip_words = ("resume", "curriculum", "vitae", "objective", "summary",
-                      "skills", "experience", "education", "profile")
-        if any(w in low for w in skip_words):
-            continue
-        return line
+    """Return the candidate's name from the first few lines of extracted resume text."""
+    _CLEAN_RE = re.compile(r"[*#_`~\[\]()]")
+    candidates = [l.strip() for l in text.splitlines() if l.strip()][:5]
+    for line in candidates:
+        name = _CLEAN_RE.sub("", line).strip()
+        words = name.split()
+        if 2 <= len(words) <= 5 and all(w.isalpha() for w in words):
+            return name
     return "Candidate"
 
 

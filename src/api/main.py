@@ -162,9 +162,17 @@ def _is_valid_url(url: str) -> bool:
 _ALLOWED_SUFFIXES = {".pdf", ".docx"}
 
 
-def _build_resume_pdf(formatted_resume: str) -> bytes:
-    """Render the plain-text formatted resume into a letter-size PDF."""
-    from reportlab.lib import colors
+_SECTION_KEYWORDS = {
+    "PROFESSIONAL SUMMARY", "TECHNICAL SKILLS", "ENGINEERING PROJECTS",
+    "EXPERIENCE", "EDUCATION", "CERTIFICATIONS", "SKILLS", "PROJECTS",
+    "WORK EXPERIENCE", "PROFESSIONAL EXPERIENCE",
+}
+
+
+def _build_resume_pdf(formatted_resume: str, candidate_name: str = "Candidate", company_name: str = "Company") -> bytes:
+    """Render plain-text formatted resume into a letter-size PDF."""
+    from reportlab.lib.colors import HexColor, black
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import inch
@@ -181,63 +189,72 @@ def _build_resume_pdf(formatted_resume: str) -> bytes:
     )
 
     name_style = ParagraphStyle(
-        "Name", fontName="Helvetica-Bold", fontSize=16, spaceAfter=4
+        "Name", fontName="Helvetica-Bold", fontSize=16,
+        alignment=TA_CENTER, spaceAfter=2,
     )
     contact_style = ParagraphStyle(
-        "Contact", fontName="Helvetica", fontSize=10, spaceAfter=6
+        "Contact", fontName="Helvetica", fontSize=10,
+        alignment=TA_CENTER, textColor=HexColor("#555555"), spaceAfter=4,
     )
     section_style = ParagraphStyle(
-        "Section", fontName="Helvetica-Bold", fontSize=11, spaceBefore=10, spaceAfter=3
+        "Section", fontName="Helvetica-Bold", fontSize=11,
+        alignment=TA_LEFT, spaceBefore=10, spaceAfter=2,
     )
     body_style = ParagraphStyle(
-        "Body", fontName="Helvetica", fontSize=10, spaceAfter=2, leading=14
+        "Body", fontName="Helvetica", fontSize=10,
+        alignment=TA_LEFT, leading=14, spaceAfter=2,
     )
     bullet_style = ParagraphStyle(
-        "Bullet", fontName="Helvetica", fontSize=10, leftIndent=14, spaceAfter=2, leading=14
+        "Bullet", fontName="Helvetica", fontSize=10,
+        alignment=TA_LEFT, leading=14, leftIndent=0.2 * inch, spaceAfter=1,
+    )
+    tech_style = ParagraphStyle(
+        "Tech", fontName="Helvetica-Oblique", fontSize=9,
+        alignment=TA_LEFT, textColor=HexColor("#666666"), spaceAfter=2,
     )
 
-    story = []
+    story: list = []
     first_line = True
     second_line = False
 
     for raw_line in formatted_resume.strip().splitlines():
-        stripped = raw_line.strip()
+        line = raw_line.strip()
 
-        if not stripped:
-            story.append(Spacer(1, 3))
+        if not line:
+            story.append(Spacer(1, 4))
             continue
 
         if first_line:
-            story.append(Paragraph(_rl_escape(stripped), name_style))
+            story.append(Paragraph(_rl_escape(line.upper()), name_style))
             first_line = False
             second_line = True
             continue
 
         if second_line:
-            story.append(Paragraph(_rl_escape(stripped), contact_style))
+            story.append(Paragraph(_rl_escape(line), contact_style))
+            story.append(HRFlowable(width="100%", thickness=0.75, color=black, spaceAfter=6))
             second_line = False
             continue
 
-        # Section headers are ALL CAPS (isupper() ignores non-alpha chars)
-        if stripped.isupper():
-            story.append(
-                HRFlowable(
-                    width="100%",
-                    thickness=0.5,
-                    color=colors.HexColor("#333333"),
-                    spaceAfter=3,
-                )
-            )
-            story.append(Paragraph(_rl_escape(stripped), section_style))
+        # Section headings — exact keyword match or fully uppercase line
+        upper = line.upper()
+        if any(kw in upper for kw in _SECTION_KEYWORDS) or (line.isupper() and len(line) >= 4):
+            story.append(Paragraph(_rl_escape(upper), section_style))
+            story.append(HRFlowable(width="100%", thickness=0.5, color=HexColor("#cccccc"), spaceAfter=4))
             continue
 
         # Bullet points
-        if stripped.startswith(("-", "•")):
-            text = stripped.lstrip("-•").strip()
-            story.append(Paragraph(f"• {_rl_escape(text)}", bullet_style))
+        if line.startswith(("•", "-")):
+            clean = line.lstrip("•- ").strip()
+            story.append(Paragraph(f"• {_rl_escape(clean)}", bullet_style))
             continue
 
-        story.append(Paragraph(_rl_escape(stripped), body_style))
+        # Tech-stack lines: short lines with | separators
+        if "|" in line and len(line) < 120:
+            story.append(Paragraph(_rl_escape(line), tech_style))
+            continue
+
+        story.append(Paragraph(_rl_escape(line), body_style))
 
     doc.build(story)
     buf.seek(0)
@@ -344,12 +361,12 @@ async def download_resume(session_id: str, request: Request) -> StreamingRespons
     candidate_name = state.get("candidate_name") or "Candidate"
     company_name = state.get("company_name") or "Company"
 
-    safe_name = re.sub(r"[^\w\s-]", "", candidate_name).strip().replace(" ", "_")
-    safe_company = re.sub(r"[^\w\s-]", "", company_name).strip().replace(" ", "_")
-    filename = f"{safe_name}_{safe_company}_Resume.pdf"
+    filename = (
+        f"{candidate_name.replace(' ', '_')}_{company_name.replace(' ', '_')}_Resume.pdf"
+    )
 
     try:
-        pdf_bytes = _build_resume_pdf(formatted_resume)
+        pdf_bytes = _build_resume_pdf(formatted_resume, candidate_name, company_name)
     except Exception as exc:
         log.exception("PDF generation failed for session %s", session_id)
         raise HTTPException(

@@ -84,6 +84,17 @@ async def _playwright_fetch(url: str) -> str:
     return _clean_html(html)
 
 
+def _clean_resume_text(text: str) -> str:
+    text = re.sub(r"\*{1,3}", "", text)
+    text = re.sub(r"#{1,6}\s?", "", text)
+    text = re.sub(r"_{1,3}", "", text)
+    text = re.sub(r"`{1,3}", "", text)
+    text = re.sub(r"~{1,2}", "", text)
+    text = re.sub(r"^[-=]{3,}\s*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def _keyword_overlap(bullets: list[str], skills: list[str]) -> float:
     if not skills:
         return 0.0
@@ -242,7 +253,7 @@ async def format_resume(state: GraphState) -> dict:
     response = await _llm.ainvoke(
         [SystemMessage(content=system_prompt), HumanMessage(content=human_content)]
     )
-    return {"formatted_resume": response.content.strip()}
+    return {"formatted_resume": _clean_resume_text(response.content)}
 
 
 async def generate_cover(state: GraphState) -> dict:
